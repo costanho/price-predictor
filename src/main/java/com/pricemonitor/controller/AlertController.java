@@ -1,17 +1,14 @@
 package com.pricemonitor.controller;
 
 import com.pricemonitor.model.Alerts;
-import com.pricemonitor.service.AlertService;
-import com.pricemonitor.service.AuthService;
+import com.pricemonitor.repository.AlertsRepository;
+import com.pricemonitor.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @RestController
 @RequestMapping("/alerts")
@@ -19,110 +16,140 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AlertController {
 
-	private final AlertService alertService;
-	private final AuthService authService;
+	private final AlertsRepository alertsRepository;
+	private final JwtUtil jwtUtil;
 
+	// ── GET /alerts — all active alerts for the user ─────────────────────────
+	// Query params:
+	//   unreadOnly=true  → only unread
+	//   limit=3          → cap results (for dashboard strip)
 	@GetMapping
-	public ResponseEntity<?> getAlerts(
-		@RequestHeader("Authorization") String authHeader,
-		@RequestParam(value = "unreadOnly", defaultValue = "false") boolean unreadOnly) {
+	public ResponseEntity<Map<String, Object>> getAlerts(
+			@RequestHeader("Authorization") String authHeader,
+			@RequestParam(defaultValue = "false") boolean unreadOnly,
+			@RequestParam(defaultValue = "50") int limit) {
 
-		try {
-			UUID userId = extractUserIdFromToken(authHeader);
+		String token = authHeader.replace("Bearer ", "");
+		UUID userId = UUID.fromString(jwtUtil.getUserIdFromToken(token));
+		LocalDateTime now = LocalDateTime.now();
 
-			List<Alerts> alerts = unreadOnly
-				? alertService.getUnreadAlerts(userId)
-				: alertService.getAllAlerts(userId);
+		List<Alerts> alerts = unreadOnly
+			? alertsRepository.findUnreadByUserId(userId, now)
+			: alertsRepository.findActiveByUserId(userId, now);
 
-			List<Map<String, Object>> alertList = alerts.stream()
-				.map(this::alertToMap)
-				.collect(Collectors.toList());
-
-			Map<String, Object> response = new HashMap<>();
-			response.put("alerts", alertList);
-			response.put("unreadCount", alertService.getUnreadCount(userId));
-
-			return ResponseEntity.ok(response);
-		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+		// Apply limit
+		if (alerts.size() > limit) {
+			alerts = alerts.subList(0, limit);
 		}
+
+		long unreadCount = alertsRepository.countUnreadByUserId(userId, now);
+
+		return ResponseEntity.ok(Map.of(
+			"alerts", alerts.stream().map(this::mapToResponse).toList(),
+			"unreadCount", unreadCount,
+			"total", alerts.size()
+		));
 	}
 
-	@GetMapping("/{id}")
-	public ResponseEntity<?> getAlert(
-		@PathVariable UUID id,
-		@RequestHeader("Authorization") String authHeader) {
-
-		try {
-			UUID userId = extractUserIdFromToken(authHeader);
-
-			return ResponseEntity.ok(Map.of("success", true));
-		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-		}
-	}
-
+	// ── PATCH /alerts/{id}/read — mark one alert as read ────────────────────
 	@PatchMapping("/{id}/read")
-	public ResponseEntity<?> markAlertAsRead(
-		@PathVariable UUID id,
-		@RequestHeader("Authorization") String authHeader) {
+	public ResponseEntity<Map<String, Object>> markRead(
+			@PathVariable UUID id,
+			@RequestHeader("Authorization") String authHeader) {
 
-		try {
-			UUID userId = extractUserIdFromToken(authHeader);
-			alertService.markAsRead(id);
+		String token = authHeader.replace("Bearer ", "");
+		UUID userId = UUID.fromString(jwtUtil.getUserIdFromToken(token));
 
-			return ResponseEntity.ok(Map.of("success", true, "message", "Alert marked as read"));
-		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+		Optional<Alerts> alertOpt = alertsRepository.findById(id);
+		if (alertOpt.isEmpty()) {
+			return ResponseEntity.notFound().build();
 		}
+
+		Alerts alert = alertOpt.get();
+		// Security — users can only mark their own alerts
+		if (!alert.getUserId().equals(userId)) {
+			return ResponseEntity.status(403).build();
+		}
+
+		alert.setIsRead(true);
+		alertsRepository.save(alert);
+
+		long newUnreadCount = alertsRepository.countUnreadByUserId(
+			userId, LocalDateTime.now()
+		);
+
+		return ResponseEntity.ok(Map.of(
+			"success", true,
+			"unreadCount", newUnreadCount
+		));
 	}
 
+	// ── PATCH /alerts/read-all — mark all alerts as read ────────────────────
+	@PatchMapping("/read-all")
+	public ResponseEntity<Map<String, Object>> markAllRead(
+			@RequestHeader("Authorization") String authHeader) {
+
+		String token = authHeader.replace("Bearer ", "");
+		UUID userId = UUID.fromString(jwtUtil.getUserIdFromToken(token));
+		List<Alerts> unread = alertsRepository.findUnreadByUserId(userId, LocalDateTime.now());
+
+		for (Alerts alert : unread) {
+			alert.setIsRead(true);
+		}
+		alertsRepository.saveAll(unread);
+
+		return ResponseEntity.ok(Map.of(
+			"success", true,
+			"markedRead", unread.size(),
+			"unreadCount", 0
+		));
+	}
+
+	// ── DELETE /alerts/{id} — soft delete one alert ──────────────────────────
 	@DeleteMapping("/{id}")
-	public ResponseEntity<?> deleteAlert(
-		@PathVariable UUID id,
-		@RequestHeader("Authorization") String authHeader) {
+	public ResponseEntity<Map<String, Object>> deleteAlert(
+			@PathVariable UUID id,
+			@RequestHeader("Authorization") String authHeader) {
 
-		try {
-			UUID userId = extractUserIdFromToken(authHeader);
-			alertService.deleteAlert(id);
+		String token = authHeader.replace("Bearer ", "");
+		UUID userId = UUID.fromString(jwtUtil.getUserIdFromToken(token));
+		Optional<Alerts> alertOpt = alertsRepository.findById(id);
 
-			return ResponseEntity.ok(Map.of("success", true, "message", "Alert deleted"));
-		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(Map.of("success", false, "error", e.getMessage()));
+		if (alertOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+		Alerts alert = alertOpt.get();
+		if (!alert.getUserId().equals(userId)) {
+			return ResponseEntity.status(403).build();
 		}
+
+		alertsRepository.softDelete(id, LocalDateTime.now());
+		return ResponseEntity.ok(Map.of("success", true));
 	}
 
-	@DeleteMapping
-	public ResponseEntity<?> clearAllAlerts(@RequestHeader("Authorization") String authHeader) {
-		try {
-			UUID userId = extractUserIdFromToken(authHeader);
+	// ── GET /alerts/count — just the unread count (for nav badge) ───────────
+	@GetMapping("/count")
+	public ResponseEntity<Map<String, Long>> getUnreadCount(
+			@RequestHeader("Authorization") String authHeader) {
 
-			return ResponseEntity.ok(Map.of("success", true, "message", "All alerts cleared"));
-		} catch (Exception e) {
-			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-		}
+		String token = authHeader.replace("Bearer ", "");
+		UUID userId = UUID.fromString(jwtUtil.getUserIdFromToken(token));
+		long count = alertsRepository.countUnreadByUserId(userId, LocalDateTime.now());
+		return ResponseEntity.ok(Map.of("unreadCount", count));
 	}
 
-	private Map<String, Object> alertToMap(Alerts alert) {
-		Map<String, Object> map = new HashMap<>();
+	// ── Map entity to response ────────────────────────────────────────────────
+	private Map<String, Object> mapToResponse(Alerts alert) {
+		Map<String, Object> map = new LinkedHashMap<>();
 		map.put("id", alert.getId());
-		map.put("type", alert.getAlertType());
+		map.put("productId", alert.getProductId());
+		map.put("storeId", alert.getStoreId());
+		map.put("alertType", alert.getAlertType());
 		map.put("title", alert.getTitle());
 		map.put("description", alert.getDescription());
 		map.put("actionText", alert.getActionText());
 		map.put("isRead", alert.getIsRead());
 		map.put("createdAt", alert.getCreatedAt());
-		map.put("productId", alert.getProductId());
-		map.put("storeId", alert.getStoreId());
+		map.put("expiresAt", alert.getExpiresAt());
 		return map;
-	}
-
-	private UUID extractUserIdFromToken(String authHeader) {
-		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-			throw new RuntimeException("Invalid or missing authorization header");
-		}
-
-		String token = authHeader.substring(7);
-		return authService.getUserFromToken(token).getId();
 	}
 }

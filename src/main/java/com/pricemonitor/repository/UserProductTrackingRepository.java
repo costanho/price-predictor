@@ -24,4 +24,13 @@ public interface UserProductTrackingRepository extends JpaRepository<UserProduct
 
 	@Query("SELECT COUNT(u) FROM UserProductTracking u WHERE u.id.userId = :userId")
 	Integer countByUserId(@Param("userId") UUID userId);
+
+	// Find all user IDs who track a specific product
+	@Query("SELECT u.id.userId FROM UserProductTracking u WHERE u.id.productId = :productId")
+	List<UUID> findUserIdsByProductId(@Param("productId") UUID productId);
+
+	// Find users who have set a target price for this product
+	@Query("SELECT u.id.userId, u.targetPrice FROM UserProductTracking u " +
+		   "WHERE u.id.productId = :productId AND u.targetPrice IS NOT NULL")
+	List<Object[]> findUsersWithTargetPrice(@Param("productId") UUID productId);
 }

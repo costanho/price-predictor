@@ -73,6 +73,23 @@ public class ProductController {
 		}
 	}
 
+	@GetMapping("/{id}/shield-score")
+	public ResponseEntity<?> getShieldScore(@PathVariable UUID id) {
+		try {
+			return productService.getProductById(id)
+				.map(product -> ResponseEntity.ok(Map.of(
+					"productId", id,
+					"productName", product.getName(),
+					"shieldScore", 85, // Placeholder - integrate with InflationShieldScores if available
+					"inflationRisk", "moderate",
+					"recommendation", "Buy now - prices expected to rise 3-5%"
+				)))
+				.orElse(ResponseEntity.notFound().build());
+		} catch (Exception e) {
+			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+		}
+	}
+
 	private Map<String, Object> productToMap(Products product) {
 		Map<String, Object> map = new HashMap<>();
 		map.put("id", product.getId());

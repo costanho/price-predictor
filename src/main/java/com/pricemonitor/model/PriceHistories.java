@@ -19,6 +19,9 @@ public class PriceHistories {
 	@Column(name = "product_id")
 	private UUID productId;
 
+	@Column(name = "store_id")
+	private String storeId;
+
 	@Column(name = "region_code")
 	private String regionCode;
 

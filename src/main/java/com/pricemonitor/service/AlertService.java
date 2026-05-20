@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -17,11 +18,11 @@ public class AlertService {
 	private final AlertsRepository alertsRepository;
 
 	public List<Alerts> getUnreadAlerts(UUID userId) {
-		return alertsRepository.findByUserIdAndIsReadFalse(userId);
+		return alertsRepository.findUnreadByUserId(userId, LocalDateTime.now());
 	}
 
 	public List<Alerts> getAllAlerts(UUID userId) {
-		return alertsRepository.findRecentAlertsForUser(userId);
+		return alertsRepository.findActiveByUserId(userId, LocalDateTime.now());
 	}
 
 	public Alerts markAsRead(UUID alertId) {
@@ -45,6 +46,7 @@ public class AlertService {
 		alert.setActionText("View Product");
 		alert.setIsRead(false);
 		alert.setCreatedAt(LocalDateTime.now());
+		alert.setExpiresAt(LocalDateTime.now().plusDays(7));
 
 		return alertsRepository.save(alert);
 	}
@@ -59,6 +61,7 @@ public class AlertService {
 		alert.setActionText("Review Details");
 		alert.setIsRead(false);
 		alert.setCreatedAt(LocalDateTime.now());
+		alert.setExpiresAt(LocalDateTime.now().plusDays(7));
 
 		return alertsRepository.save(alert);
 	}
@@ -73,15 +76,29 @@ public class AlertService {
 		alert.setActionText("Track Deal");
 		alert.setIsRead(false);
 		alert.setCreatedAt(LocalDateTime.now());
+		alert.setExpiresAt(LocalDateTime.now().plusDays(7));
 
 		return alertsRepository.save(alert);
 	}
 
 	public void deleteAlert(UUID alertId) {
-		alertsRepository.deleteById(alertId);
+		Alerts alert = alertsRepository.findById(alertId)
+			.orElseThrow(() -> new RuntimeException("Alert not found"));
+		alert.setDeletedAt(LocalDateTime.now());
+		alertsRepository.save(alert);
 	}
 
 	public Long getUnreadCount(UUID userId) {
-		return (long) alertsRepository.findByUserIdAndIsReadFalse(userId).size();
+		return alertsRepository.countUnreadByUserId(userId, LocalDateTime.now());
+	}
+
+	// Soft delete expired alerts (scheduled job)
+	public void cleanupExpiredAlerts() {
+		alertsRepository.softDeleteExpired(LocalDateTime.now());
+	}
+
+	// Hard delete old soft-deleted alerts (7+ days)
+	public void purgeDeletedAlerts() {
+		alertsRepository.hardDeleteOldDeleted(LocalDateTime.now().minusDays(7));
 	}
 }

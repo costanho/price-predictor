@@ -3,7 +3,9 @@ package com.pricemonitor.service;
 import com.pricemonitor.dto.LoginRequest;
 import com.pricemonitor.dto.LoginResponse;
 import com.pricemonitor.model.Users;
+import com.pricemonitor.model.UserTrackedStores;
 import com.pricemonitor.repository.UsersRepository;
+import com.pricemonitor.repository.UserTrackedStoresRepository;
 import com.pricemonitor.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,6 +19,7 @@ import java.util.UUID;
 public class AuthService {
 
 	private final UsersRepository usersRepository;
+	private final UserTrackedStoresRepository userTrackedStoreRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtUtil jwtUtil;
 
@@ -37,6 +40,23 @@ public class AuthService {
 		user.setSearchRadiusMiles(10);
 
 		usersRepository.save(user);
+
+		// Add Walmart and Kroger as default tracked stores for all new users
+		UserTrackedStores walmartDefault = new UserTrackedStores();
+		UserTrackedStores.UserTrackedStoresKey walmartKey = new UserTrackedStores.UserTrackedStoresKey();
+		walmartKey.setUserId(user.getId());
+		walmartKey.setStoreId("walmart");
+		walmartDefault.setId(walmartKey);
+		walmartDefault.setAddedAt(LocalDateTime.now());
+		userTrackedStoreRepository.save(walmartDefault);
+
+		UserTrackedStores krogerDefault = new UserTrackedStores();
+		UserTrackedStores.UserTrackedStoresKey krogerKey = new UserTrackedStores.UserTrackedStoresKey();
+		krogerKey.setUserId(user.getId());
+		krogerKey.setStoreId("kroger");
+		krogerDefault.setId(krogerKey);
+		krogerDefault.setAddedAt(LocalDateTime.now());
+		userTrackedStoreRepository.save(krogerDefault);
 	}
 
 	public LoginResponse login(String email, String password) {
@@ -54,7 +74,7 @@ public class AuthService {
 		user.setLastLoginAt(LocalDateTime.now());
 		usersRepository.save(user);
 
-		String token = jwtUtil.generateToken(user.getEmail());
+		String token = jwtUtil.generateTokenWithUserId(user.getId().toString(), user.getEmail());
 		return new LoginResponse(token, user.getId(), user.getEmail());
 	}
 

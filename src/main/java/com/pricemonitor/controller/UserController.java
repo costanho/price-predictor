@@ -2,13 +2,18 @@ package com.pricemonitor.controller;
 
 import com.pricemonitor.model.NotificationPreferences;
 import com.pricemonitor.model.Users;
+import com.pricemonitor.model.UserTrackedStores;
+import com.pricemonitor.repository.UserTrackedStoresRepository;
+import com.pricemonitor.security.JwtUtil;
 import com.pricemonitor.service.AuthService;
 import com.pricemonitor.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -20,6 +25,8 @@ public class UserController {
 
 	private final UserService userService;
 	private final AuthService authService;
+	private final UserTrackedStoresRepository userTrackedStoreRepository;
+	private final JwtUtil jwtUtil;
 
 	@GetMapping("/profile")
 	public ResponseEntity<?> getProfile(@RequestHeader("Authorization") String authHeader) {
@@ -129,6 +136,52 @@ public class UserController {
 			response.put("weeklyEmail", prefs.getWeeklyEmail());
 
 			return ResponseEntity.ok(response);
+		} catch (Exception e) {
+			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+		}
+	}
+
+	@GetMapping("/stores")
+	public ResponseEntity<?> getUserStores(
+			@RequestHeader("Authorization") String authHeader) {
+		try {
+			UUID userId = extractUserIdFromToken(authHeader);
+			List<String> storeIds = userTrackedStoreRepository.findStoreIdsByUserId(userId);
+			return ResponseEntity.ok(Map.of("storeIds", storeIds));
+		} catch (Exception e) {
+			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+		}
+	}
+
+	@PostMapping("/stores/{storeId}")
+	public ResponseEntity<Map<String, String>> addStore(
+			@PathVariable String storeId,
+			@RequestHeader("Authorization") String authHeader) {
+		try {
+			UUID userId = extractUserIdFromToken(authHeader);
+			if (!userTrackedStoreRepository.existsByUserIdAndStoreId(userId, storeId)) {
+				UserTrackedStores uts = new UserTrackedStores();
+				UserTrackedStores.UserTrackedStoresKey key = new UserTrackedStores.UserTrackedStoresKey();
+				key.setUserId(userId);
+				key.setStoreId(storeId);
+				uts.setId(key);
+				uts.setAddedAt(LocalDateTime.now());
+				userTrackedStoreRepository.save(uts);
+			}
+			return ResponseEntity.ok(Map.of("status", "added"));
+		} catch (Exception e) {
+			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+		}
+	}
+
+	@DeleteMapping("/stores/{storeId}")
+	public ResponseEntity<Map<String, String>> removeStore(
+			@PathVariable String storeId,
+			@RequestHeader("Authorization") String authHeader) {
+		try {
+			UUID userId = extractUserIdFromToken(authHeader);
+			userTrackedStoreRepository.deleteByUserIdAndStoreId(userId, storeId);
+			return ResponseEntity.ok(Map.of("status", "removed"));
 		} catch (Exception e) {
 			return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
 		}
