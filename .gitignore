@@ -1,114 +1,61 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# Environment variables
+.env
+.env.local
+.env.*.local
 
-# dependencies
-node_modules/
-
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
-
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
-*.pem
-
-# local env files
-.env*.local
-
-# typescript
-*.tsbuildinfo
-
-app-example
-
-# generated native folders
-/ios
-/android
-
-# Python / ML
+# Python
 __pycache__/
-*.pyc
-.venv/
-venv/
-env/
-*.pkl
-*.joblib
-*.h5
-models/trained/
-.ipynb_checkpoints/
-
-# Java / Spring Boot
-target/
-*.class
-*.jar
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
-.gradle/
-out/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# React / Node (additional)
-build/
-coverage/
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
 .next/
 out/
+.vercel
 
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.project
-.classpath
-.c9/
-*.sublime-project
-*.sublime-workspace
+.DS_Store
 
-# Data
-data/raw/
-data/processed/
-*.csv
-*.xlsx
-*.xls
+# Docker
+.dockerignore
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
 # Logs
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Cache
-.cache/
-.eslintcache
-*.cache
-
-# Misc
-.turbo/
-dist/
+# Models
+*.pth
+*.pkl
+models/archive/
