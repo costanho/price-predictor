@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+torch
+numpy
+pandas
+scikit-learn
+darts
+pytorch-lightning
+python-dotenv
+psycopg2-binary
+pydantic
